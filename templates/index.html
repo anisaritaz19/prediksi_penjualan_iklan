@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set mt = meta.metrics %}
+{% set mdl = meta.model %}
+
+<!-- ===================== HERO ===================== -->
+<section class="hero">
+  <div class="container">
+    <div class="row align-items-center g-4">
+      <div class="col-lg-7">
+        <span class="chip"><i class="bi bi-stars me-1"></i>Machine Learning &middot; Regresi Linear Sederhana</span>
+        <h1 class="hero-title mt-3">Prediksi Penjualan dari <span class="text-gradient">Biaya Iklan TV</span></h1>
+        <p class="hero-sub">
+          Masukkan anggaran iklan televisi dan dapatkan estimasi penjualan secara instan,
+          dihitung dari model yang dilatih pada {{ meta.dataset.rows_clean }} data historis iklan.
+        </p>
+        <div class="d-flex flex-wrap gap-3 hero-stats">
+          <div><strong>{{ mt.r2_test|num(2) }}</strong><span>R&sup2; data uji</span></div>
+          <div><strong>{{ mt.rmse_test|num(2) }}</strong><span>RMSE (ribu unit)</span></div>
+          <div><strong>{{ meta.dataset.correlation|num(2) }}</strong><span>Korelasi TV&ndash;Sales</span></div>
+        </div>
+      </div>
+      <div class="col-lg-5 d-none d-lg-block">
+        <div class="equation-card">
+          <div class="eq-label">Persamaan model</div>
+          <div class="eq-body">
+            Sales = {{ mdl.intercept|num(2) }} + {{ mdl.coef|num(4) }} &times; TV
+          </div>
+          <div class="eq-note">TV dalam ribu USD &middot; Sales dalam ribu unit</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PREDIKSI + GRAFIK ===================== -->
+<section class="container section-pull">
+  <div class="row g-4">
+
+    <!-- Kolom kiri: form + hasil -->
+    <div class="col-lg-5">
+      <div class="card-x">
+        <div class="card-head">
+          <span class="icon-box"><i class="bi bi-tv"></i></span>
+          <div>
+            <h2 class="card-title-x">Input Biaya Iklan TV</h2>
+            <p class="card-sub">Masukkan anggaran untuk memprediksi penjualan.</p>
+          </div>
+        </div>
+
+        <form method="post" action="{{ url_for('index') }}#hasil" novalidate id="predict-form">
+          <label for="tv" class="form-label fw-semibold">Biaya Iklan TV (ribu USD)</label>
+          <div class="input-group input-group-lg">
+            <span class="input-group-text">$</span>
+            <input type="number" step="any" min="0" inputmode="decimal"
+                   class="form-control {{ 'is-invalid' if error }}"
+                   id="tv" name="tv" value="{{ tv_value }}"
+                   placeholder="contoh: 150" required autofocus>
+            <span class="input-group-text">ribu</span>
+            {% if error %}<div class="invalid-feedback">{{ error }}</div>{% endif %}
+          </div>
+          <div class="form-text">
+            Rentang data latih: {{ meta.range.tv_min|num(1) }} &ndash; {{ meta.range.tv_max|num(1) }} ribu USD.
+            Contoh: <code>150</code> = $150,000.
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 my-3" aria-label="Contoh cepat">
+            {% for v in [25, 75, 150, 225, 290] %}
+            <button type="button" class="btn btn-sm btn-quick" data-fill="{{ v }}">{{ v }}</button>
+            {% endfor %}
+          </div>
+
+          <button type="submit" class="btn btn-accent btn-lg w-100">
+            <i class="bi bi-lightning-charge-fill me-1"></i>Prediksi Penjualan
+          </button>
+        </form>
+      </div>
+
+      <!-- Hasil -->
+      <div id="hasil"></div>
+      {% if result %}
+      <div class="card-x result-card mt-4">
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="chip chip-green"><i class="bi bi-check-circle-fill me-1"></i>Hasil Estimasi</span>
+        </div>
+        <div class="result-label">Estimasi penjualan</div>
+        <div class="result-value">{{ result.sales|num(2) }} <small>ribu unit</small></div>
+        <div class="result-sub">&asymp; {{ result.sales_units|num(0) }} unit terjual</div>
+
+        <hr>
+        <div class="row g-3 small">
+          <div class="col-6">
+            <div class="text-muted-2">Biaya iklan TV</div>
+            <div class="fw-semibold">${{ result.tv_usd|num(0) }}</div>
+          </div>
+          <div class="col-6">
+            <div class="text-muted-2">Perkiraan rentang (&plusmn;1 RMSE)</div>
+            <div class="fw-semibold">{{ result.low|num(1) }} &ndash; {{ result.high|num(1) }} ribu unit</div>
+          </div>
+        </div>
+
+        {% if result.warning %}
+        <div class="alert alert-warning mt-3 mb-0 small">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ result.warning }}
+        </div>
+        {% endif %}
+      </div>
+      {% elif not error %}
+      <div class="card-x empty-card mt-4 text-center">
+        <i class="bi bi-bar-chart-line"></i>
+        <p class="mb-0">Hasil estimasi akan tampil di sini setelah Anda menekan tombol prediksi.</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Kolom kanan: grafik -->
+    <div class="col-lg-7">
+      <div class="card-x h-100">
+        <div class="card-head">
+          <span class="icon-box"><i class="bi bi-graph-up"></i></span>
+          <div>
+            <h2 class="card-title-x">Grafik Data &amp; Garis Regresi</h2>
+            <p class="card-sub">Scatterplot TV vs Sales untuk memvalidasi tren linear.</p>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="salesChart" aria-label="Scatterplot biaya iklan TV terhadap penjualan" role="img"></canvas>
+        </div>
+        <p class="small text-muted-2 mt-3 mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Setiap titik adalah satu observasi. Garis merah adalah garis lurus terbaik (<em>best-fit line</em>);
+          titik oranye besar adalah hasil prediksi Anda.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== EVALUASI MODEL ===================== -->
+<section class="container py-5" id="evaluasi">
+  <div class="section-head">
+    <h2>Evaluasi Model</h2>
+    <p>Diukur pada {{ meta.split.n_test }} data uji ({{ (meta.split.test_size * 100)|round|int }}% dari total data).</p>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-icon bg-indigo"><i class="bi bi-bullseye"></i></div>
+        <div class="metric-value">{{ mt.r2_test|num(4) }}</div>
+        <div class="metric-name">R&sup2; (R-squared)</div>
+        <div class="metric-desc">{{ (mt.r2_test * 100)|num(1) }}% variasi penjualan dapat dijelaskan oleh biaya iklan TV.</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-icon bg-amber"><i class="bi bi-rulers"></i></div>
+        <div class="metric-value">{{ mt.rmse_test|num(3) }}</div>
+        <div class="metric-name">RMSE</div>
+        <div class="metric-desc">Rata-rata prediksi meleset &plusmn;{{ (mt.rmse_test * 1000)|num(0) }} unit.</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-icon bg-teal"><i class="bi bi-arrows-collapse"></i></div>
+        <div class="metric-value">{{ mt.mae_test|num(3) }}</div>
+        <div class="metric-name">MAE</div>
+        <div class="metric-desc">Rata-rata selisih absolut prediksi dan nilai aktual.</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="metric-card">
+        <div class="metric-icon bg-rose"><i class="bi bi-database"></i></div>
+        <div class="metric-value">{{ meta.dataset.rows_clean }}</div>
+        <div class="metric-name">Jumlah Data</div>
+        <div class="metric-desc">{{ meta.split.n_train }} data latih &middot; {{ meta.split.n_test }} data uji.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-x mt-4">
+    <div class="row g-4 align-items-center">
+      <div class="col-md-8">
+        <h3 class="h6 fw-bold mb-2"><i class="bi bi-lightbulb me-1 text-accent"></i>Cara membaca hasil</h3>
+        <p class="mb-0 text-muted-2">
+          Setiap kenaikan biaya iklan TV sebesar <strong>1 ribu USD</strong>, penjualan diprediksi naik sekitar
+          <strong>{{ (mdl.coef * 1000)|num(1) }} unit</strong>
+          (koefisien {{ mdl.coef|num(4) }} ribu unit). Model ini hanya memakai satu variabel (TV),
+          sehingga faktor lain seperti Radio, Newspaper, musim, dan harga tidak diperhitungkan.
+        </p>
+      </div>
+      <div class="col-md-4 text-md-end">
+        <a href="{{ url_for('analisis') }}" class="btn btn-outline-accent">
+          Lihat analisis lengkap <i class="bi bi-arrow-right ms-1"></i>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>window.APP = {{ app_data|tojson }};</script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

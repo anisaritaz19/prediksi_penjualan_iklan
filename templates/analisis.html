@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Analisis Model | Prediksi Penjualan dari Iklan TV{% endblock %}
+
+{% block content %}
+{% set ds = meta.dataset %}
+{% set mt = meta.metrics %}
+{% set mdl = meta.model %}
+
+<section class="hero hero-small">
+  <div class="container">
+    <span class="chip"><i class="bi bi-clipboard-data me-1"></i>Analisis &amp; Dokumentasi</span>
+    <h1 class="hero-title mt-3">Analisis <span class="text-gradient">Model Regresi Linear</span></h1>
+    <p class="hero-sub mb-0">Ringkasan dataset, eksplorasi data, parameter model, dan interpretasinya dalam konteks iklan TV.</p>
+  </div>
+</section>
+
+<section class="container section-pull pb-5">
+
+  <!-- 1. Dataset -->
+  <div class="card-x mb-4">
+    <div class="card-head">
+      <span class="icon-box"><i class="bi bi-database"></i></span>
+      <div>
+        <h2 class="card-title-x">1. Dataset</h2>
+        <p class="card-sub">{{ ds.source }} &middot; {{ ds.rows_raw }} baris</p>
+      </div>
+    </div>
+    <p class="text-muted-2">
+      Variabel independen (X) adalah <code>TV</code> (biaya iklan TV, ribu USD) dan variabel dependen (y)
+      adalah <code>Sales</code> (penjualan, ribu unit). Kolom di dataset:
+      {% for c in ds.columns %}<code>{{ c }}</code>{{ ", " if not loop.last }}{% endfor %}.
+    </p>
+    <div class="table-responsive">
+      <table class="table table-modern align-middle mb-0">
+        <thead>
+          <tr>{% for c in ds.columns %}<th class="{{ 'hl' if c in ['TV', 'Sales'] }}">{{ c }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody>
+          {% for row in ds.head %}
+          <tr>{% for c in ds.columns %}<td class="{{ 'hl' if c in ['TV', 'Sales'] }}">{{ row[c] }}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="small text-muted-2 mt-2 mb-0">5 baris pertama dataset (kolom TV dan Sales digunakan oleh model).</p>
+  </div>
+
+  <!-- 2. EDA -->
+  <div class="card-x mb-4">
+    <div class="card-head">
+      <span class="icon-box"><i class="bi bi-search"></i></span>
+      <div>
+        <h2 class="card-title-x">2. Eksplorasi &amp; Pembersihan Data</h2>
+        <p class="card-sub">Statistik deskriptif dan validasi asumsi linearitas.</p>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3"><div class="mini-stat"><span>Data awal</span><strong>{{ ds.rows_raw }}</strong></div></div>
+      <div class="col-6 col-md-3"><div class="mini-stat"><span>Missing value</span><strong>{{ ds.missing_values }}</strong></div></div>
+      <div class="col-6 col-md-3"><div class="mini-stat"><span>Outlier TV / Sales</span><strong>{{ ds.outliers_tv }} / {{ ds.outliers_sales }}</strong></div></div>
+      <div class="col-6 col-md-3"><div class="mini-stat"><span>Korelasi (r)</span><strong>{{ ds.correlation|num(3) }}</strong></div></div>
+    </div>
+
+    <div class="table-responsive mb-4">
+      <table class="table table-modern align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Variabel</th><th>Mean</th><th>Std</th><th>Min</th><th>25%</th><th>50%</th><th>75%</th><th>Max</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for col, s in ds.describe.items() %}
+          <tr>
+            <td class="hl">{{ col }}</td>
+            <td>{{ s['mean']|num(2) }}</td><td>{{ s['std']|num(2) }}</td><td>{{ s['min']|num(2) }}</td>
+            <td>{{ s['25%']|num(2) }}</td><td>{{ s['50%']|num(2) }}</td><td>{{ s['75%']|num(2) }}</td>
+            <td>{{ s['max']|num(2) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <img src="{{ url_for('static', filename='img/scatter_tv_sales.png') }}"
+         alt="Scatterplot TV vs Sales dengan garis regresi" class="img-fluid rounded-3 border">
+    <p class="small text-muted-2 mt-2 mb-0">
+      Titik data membentuk pola menaik yang mendekati garis lurus (r = {{ ds.correlation|num(3) }}),
+      sehingga asumsi hubungan linear terpenuhi secara visual. Sebaran yang melebar pada biaya TV tinggi
+      menandakan ada faktor lain yang memengaruhi penjualan.
+    </p>
+  </div>
+
+  <!-- 3. Model -->
+  <div class="card-x mb-4">
+    <div class="card-head">
+      <span class="icon-box"><i class="bi bi-cpu"></i></span>
+      <div>
+        <h2 class="card-title-x">3. Model &amp; Interpretasi Parameter</h2>
+        <p class="card-sub">LinearRegression (Scikit-Learn) &middot; split {{ ((1 - meta.split.test_size) * 100)|round|int }}:{{ (meta.split.test_size * 100)|round|int }} &middot; random_state {{ meta.split.random_state }}</p>
+      </div>
+    </div>
+
+    <div class="equation-inline mb-4">
+      y = {{ mdl.intercept|num(4) }} + {{ mdl.coef|num(6) }} &times; x
+    </div>
+
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="interp-box">
+          <h3 class="h6 fw-bold">Intercept (&beta;<sub>0</sub>) = {{ it.intercept|num(3) }}</h3>
+          <p class="mb-0 text-muted-2">
+            Jika biaya iklan TV sebesar nol, penjualan dasar diprediksi sekitar
+            <strong>{{ it.intercept|num(2) }} ribu unit</strong> (&asymp; {{ it.intercept_unit|num(0) }} unit).
+            Angka ini mewakili penjualan yang berasal dari faktor lain di luar iklan TV (mis. media lain,
+            merek, atau pelanggan tetap). Perlu hati-hati karena data latih tidak memuat anggaran TV mendekati nol
+            ({{ meta.range.tv_min|num(1) }} adalah nilai terkecil).
+          </p>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="interp-box">
+          <h3 class="h6 fw-bold">Koefisien TV (&beta;<sub>1</sub>) = {{ it.per_1|num(4) }}</h3>
+          <p class="mb-0 text-muted-2">
+            Setiap tambahan <strong>1 ribu USD</strong> biaya iklan TV meningkatkan penjualan rata-rata
+            <strong>{{ it.per_1|num(4) }} ribu unit</strong> (&asymp; {{ it.per_1_unit|num(1) }} unit).
+            Untuk tambahan <strong>10 ribu USD</strong>, kenaikannya sekitar
+            <strong>{{ it.per_10_unit|num(0) }} unit</strong>. Tanda positif menunjukkan hubungan searah.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive mt-4">
+      <table class="table table-modern align-middle mb-0">
+        <thead><tr><th>Metrik</th><th>Data latih</th><th>Data uji</th></tr></thead>
+        <tbody>
+          <tr><td class="hl">R&sup2;</td><td>{{ mt.r2_train|num(4) }}</td><td>{{ mt.r2_test|num(4) }}</td></tr>
+          <tr><td class="hl">RMSE (ribu unit)</td><td>{{ mt.rmse_train|num(4) }}</td><td>{{ mt.rmse_test|num(4) }}</td></tr>
+          <tr><td class="hl">MAE (ribu unit)</td><td>&ndash;</td><td>{{ mt.mae_test|num(4) }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small text-muted-2 mt-2 mb-0">
+      Rata-rata penjualan pada dataset adalah {{ meta.range.sales_mean|num(2) }} ribu unit, sehingga RMSE
+      {{ mt.rmse_test|num(2) }} setara &plusmn;{{ ((mt.rmse_test / meta.range.sales_mean) * 100)|num(0) }}% dari rata-rata penjualan.
+    </p>
+  </div>
+
+  <!-- 4. Keterbatasan -->
+  <div class="card-x">
+    <div class="card-head">
+      <span class="icon-box"><i class="bi bi-shield-exclamation"></i></span>
+      <div>
+        <h2 class="card-title-x">4. Keterbatasan Model</h2>
+        <p class="card-sub">Hal yang perlu diperhatikan saat memakai hasil prediksi.</p>
+      </div>
+    </div>
+    <ul class="limit-list mb-0">
+      <li><strong>Satu variabel.</strong> Hanya TV yang dipakai; Radio dan Newspaper tidak ikut dimodelkan.</li>
+      <li><strong>Korelasi bukan kausalitas.</strong> Hubungan kuat tidak otomatis berarti iklan TV satu-satunya penyebab kenaikan penjualan.</li>
+      <li><strong>Ekstrapolasi.</strong> Prediksi di luar rentang {{ meta.range.tv_min|num(1) }}&ndash;{{ meta.range.tv_max|num(1) }} ribu USD kurang andal.</li>
+      <li><strong>Data kecil.</strong> Hanya {{ ds.rows_clean }} observasi, sehingga hasil evaluasi bisa berubah bila data dibagi dengan cara lain.</li>
+      <li><strong>Heteroskedastisitas.</strong> Sebaran galat cenderung melebar pada anggaran TV besar, jadi rentang &plusmn;RMSE hanya perkiraan kasar.</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}
